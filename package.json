@@ -10,7 +10,6 @@
   "license": "ISC",
   "dependencies": {
     "fast-csv": "^4.3.2",
-    "ftp": "^0.3.10",
-    "request": "^2.88.2"
+    "ftp": "^0.3.10"
   }
 }
