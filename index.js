@@ -1,8 +1,6 @@
 const fs = require('fs')
 const Ftp = require('ftp')
 const csv = require('fast-csv')
-const { callbackify } = require('util')
-const { Console } = require('console')
 
 const dir = 'feeds/inventory/'
 const loc = 'tmp/'
@@ -44,17 +42,19 @@ const processFiles = () => {
         getPrices(loc + 'products.csv', (prices) => {
 
             let files = ['FLBKLYN-1.csv', 'FLBKLYN-2.csv', 'FLNYC-1.csv', 'FLNYC-2.csv', 'FLCHLS-1.csv', 'FLCHLS-2.csv']
+            let filesProcessed = 0
 
-            files.forEach((file) => {
+            files.forEach((file, index, array) => {
                 fs.access(loc + file, (err) => {
                     if (err) throw err
-                    processStock(loc + file, prices)
+                    processStock(loc + file, prices, () => {
+                        filesProcessed++
+                        if (filesProcessed == array.length) {
+                            createFile()
+                        }
+                    })
                 })
             })
-
-            setTimeout(() => {
-                console.log(stock.length)
-            }, 5000)
 
         })
     })
@@ -82,7 +82,7 @@ const getPrices = (file, callback) => {
 
 }
 
-const processStock = (file, prices) => {
+const processStock = (file, prices, callback) => {
 
     fs.createReadStream(file)
         .pipe(csv.parse({
@@ -100,11 +100,48 @@ const processStock = (file, prices) => {
             return t
         })
         .on('data', (data) => {
-            stock.push(data)
+            if (data['Price']) {
+
+                let match = false
+                stock.forEach((line) => {
+                    if (line['Store Code'] == data['Store Code'] && line['Item Id'] == data['Item Id']) {
+                        line['Quantity'] = parseInt(line['Quantity']) + parseInt(data['Quantity'])
+                        match = true
+                    }
+                })
+
+                if (!match) {
+                    stock.push(data)
+                }
+                
+            }
         })
         .on('end', () => {
             console.log(file, 'parsed')
+            callback()
         })
+
+}
+
+const createFile = () => {
+
+    let data = ["Store Code", "Item Id", "Quantity", "Price"]
+
+    stock.forEach((line) => {
+        data += "\n"
+        data += [line["Store Code"], line["Item Id"], line["Quantity"], line["Price"]]
+    })
+
+    fs.writeFile(loc + 'stock.txt', data, (err) => {
+        if (err) throw err
+
+        ftp.put(loc + 'stock.txt', dir + 'stock.txt', (err) => {
+            if (err) throw err
+            console.log('file uploaded')
+            ftp.end()
+        })
+
+    })
 
 }
 
